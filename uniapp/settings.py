@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "courses.apps.CoursesConfig",
     'buildings',
     'timetable',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
