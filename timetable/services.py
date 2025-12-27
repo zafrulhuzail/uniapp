@@ -4,12 +4,13 @@ from typing import List, Optional
 
 from courses.models import SectionMeeting, Enrollment
 from timetable.models import StudentPersonalEvent
+from accounts.models import Student
 
 @dataclass
 class TimeTableItem:
     type: str  # 'course' or 'personal_event'
     title: str
-    weekday: int
+    weekday: str
     start_time: time
     end_time: time
     building: str
@@ -17,22 +18,29 @@ class TimeTableItem:
     description: Optional[str] = None
 
 def get_student_timetable(student_id: int) -> List[TimeTableItem]:
-    #course meetings via enrollments
-    meetings = SectionMeeting.objects.filter(
-        section__enrollment__student__id=student_id
-    ).select_related('section__course', 'building', 'room')
+    # student_id here means Student.student_id
+    student = Student.objects.get(student_id=student_id)
 
-    courses_items = [ 
+    # 1) get enrollments for this student
+    enrollments = Enrollment.objects.filter(student=student)
+
+    # 2) get the sections from those enrollments
+    sections = [e.section for e in enrollments]
+
+    # 3) get meetings for those sections
+    meetings = SectionMeeting.objects.filter(section__in=sections)
+
+    courses_items = [
         TimeTableItem(
-            type='course',
-            title=meeting.section.course.title,
-            weekday=meeting.weekday,
-            start_time=meeting.start_time,
-            end_time=meeting.end_time,
-            building=meeting.building.name,
-            room=meeting.room.name
+            type="course",
+            title=m.section.course.title,
+            weekday=m.get_weekday_display(),
+            start_time=m.start_time,
+            end_time=m.end_time,
+            building=m.building.name,
+            room=m.room.name,
         )
-        for meeting in meetings
+        for m in meetings
     ]
 
     personal = StudentPersonalEvent.objects.filter(student__student_id=student_id)\
@@ -42,7 +50,7 @@ def get_student_timetable(student_id: int) -> List[TimeTableItem]:
         TimeTableItem(
             type='personal_event',
             title=event.title,
-            weekday=event.weekday,
+            weekday=event.get_weekday_display(),
             start_time=event.start_time,
             end_time=event.end_time,
             building=event.building.name,
