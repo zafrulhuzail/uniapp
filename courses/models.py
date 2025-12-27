@@ -14,6 +14,7 @@ class Section(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
     professor = models.ForeignKey(Professor, on_delete=models.CASCADE)
+    is_mandatory = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ('course', 'semester', 'professor')
@@ -48,7 +49,9 @@ class Enrollment(models.Model):
     section = models.ForeignKey(Section, on_delete=models.CASCADE)
 
     class Meta:
-        unique_together = ('student', 'section')
+        constraints = [
+            models.UniqueConstraint(fields=["student", "section"], name="uniq_student_section")
+        ]
 
     def __str__(self):
         return f"{self.student} enrolled in {self.section}"
