@@ -11,16 +11,18 @@
         <th>Day</th>
         <th>Start</th>
         <th>End</th>
-        <th>Location</th>
+        <th>Building</th>
+        <th>Room</th>
       </tr>
       {% for item in items %}
       <tr>
-        <td>{{ item.kind }}</td>
+        <td>{{ item.type }}</td>
         <td>{{ item.title }}</td>
-        <td>{{ item.weekday_name }}</td>
-        <td>{{ item.start }}</td>
-        <td>{{ item.end }}</td>
-        <td>{{ item.location }}</td>
+        <td>{{ item.weekday }}</td>
+        <td>{{ item.start_time }}</td>
+        <td>{{ item.end_time }}</td>
+        <td>{{ item.building }} </td>
+        <td>{{ item.room }}</td>
       </tr>
       {% endfor %}
     </table>
