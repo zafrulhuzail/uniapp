@@ -14,20 +14,22 @@ class SignupForm(forms.Form):
     def save(self):
         user = User.objects.create_user(
             username=self.cleaned_data['username'],
-            password=self.cleaned_data['password'],
-            first_name=self.cleaned_data['first_name'],
-            last_name=self.cleaned_data['last_name']
+            password=self.cleaned_data['password']
         )
 
         if self.cleaned_data['role'] == 'student':
             Student.objects.create(
                 user=user,
-                student_id=self.cleaned_data['student_id']
+                student_id=self.cleaned_data['student_id'],
+                first_name=self.cleaned_data['first_name'],
+                last_name=self.cleaned_data['last_name']
             )
         else:
             Professor.objects.create(
                 user=user,
-                employee_id=self.cleaned_data['employee_id']
+                employee_id=self.cleaned_data['employee_id'],
+                first_name=self.cleaned_data['first_name'],
+                last_name=self.cleaned_data['last_name']
             )
 
         return user
