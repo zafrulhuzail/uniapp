@@ -42,11 +42,12 @@ class SectionMeeting(models.Model):
     description = models.TextField(blank=True)
 
     def __str__(self):
-        return f"{self.section} meets on {self.weekday} from {self.start_time} to {self.end_time} at {self.room}"
+        return f"{self.section} meets on {self.get_weekday_display()} from {self.start_time} to {self.end_time} at {self.room}"
 
 class Enrollment(models.Model):
     student = models.ForeignKey('accounts.Student', on_delete=models.CASCADE)
     section = models.ForeignKey(Section, on_delete=models.CASCADE)
+    show_on_timetable = models.BooleanField(default=True)
 
     class Meta:
         constraints = [
