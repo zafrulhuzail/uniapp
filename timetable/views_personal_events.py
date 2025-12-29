@@ -2,8 +2,10 @@ from datetime import time
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
+from django.shortcuts import get_object_or_404
 
 from buildings.models import Building, Room
+from timetable.services import detect_conflict
 from .models import StudentPersonalEvent
 
 
@@ -142,3 +144,97 @@ def personal_event_delete(request, event_id: int):
 
     ev.delete()
     return JsonResponse({"ok": True})
+
+# -------------------------
+# Personal events (SOFT WARNING + FORCE)
+# -------------------------
+@login_required
+@require_POST
+def personal_event_create(request):
+    student = getattr(request.user, "student", None)
+    if not student:
+        return JsonResponse({"error": "You are not a student."}, status=403)
+
+    try:
+        weekday = int(request.POST.get("weekday"))
+        start_time = time.fromisoformat(request.POST.get("start_time"))
+        end_time = time.fromisoformat(request.POST.get("end_time"))
+    except Exception:
+        return JsonResponse({"error": "Invalid weekday/start/end."}, status=400)
+
+    force = request.POST.get("force") == "1"
+
+    msg = detect_conflict(
+        student=student,
+        weekday=weekday,
+        start_time=start_time,
+        end_time=end_time,
+    )
+
+    if msg and not force:
+        return JsonResponse({"warning": msg, "can_force": True}, status=200)
+
+    ev = StudentPersonalEvent.objects.create(
+        student=student,
+        title=(request.POST.get("title") or "").strip(),
+        weekday=weekday,
+        start_time=start_time,
+        end_time=end_time,
+        building_id=request.POST.get("building_id") or None,
+        room_id=request.POST.get("room_id") or None,
+        description=(request.POST.get("description") or "").strip(),
+    )
+    return JsonResponse({"ok": True, "id": ev.id}, status=200)
+
+
+@login_required
+@require_POST
+def personal_event_update(request, event_id):
+    student = getattr(request.user, "student", None)
+    if not student:
+        return JsonResponse({"error": "You are not a student."}, status=403)
+
+    ev = get_object_or_404(StudentPersonalEvent, id=event_id, student=student)
+
+    try:
+        weekday = int(request.POST.get("weekday"))
+        start_time = time.fromisoformat(request.POST.get("start_time"))
+        end_time = time.fromisoformat(request.POST.get("end_time"))
+    except Exception:
+        return JsonResponse({"error": "Invalid weekday/start/end."}, status=400)
+
+    force = request.POST.get("force") == "1"
+
+    msg = detect_conflict(
+        student=student,
+        weekday=weekday,
+        start_time=start_time,
+        end_time=end_time,
+        ignore_personal_event_id=ev.id,
+    )
+
+    if msg and not force:
+        return JsonResponse({"warning": msg, "can_force": True}, status=200)
+
+    ev.title = (request.POST.get("title") or "").strip()
+    ev.weekday = weekday
+    ev.start_time = start_time
+    ev.end_time = end_time
+    ev.building_id = request.POST.get("building_id") or None
+    ev.room_id = request.POST.get("room_id") or None
+    ev.description = (request.POST.get("description") or "").strip()
+    ev.save()
+
+    return JsonResponse({"ok": True}, status=200)
+
+
+@login_required
+@require_POST
+def personal_event_delete(request, event_id):
+    student = getattr(request.user, "student", None)
+    if not student:
+        return JsonResponse({"error": "You are not a student."}, status=403)
+
+    ev = get_object_or_404(StudentPersonalEvent, id=event_id, student=student)
+    ev.delete()
+    return JsonResponse({"ok": True}, status=200)

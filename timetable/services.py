@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import time
 from typing import List, Optional
+from django.db.models import Q
 
 from courses.models import SectionMeeting, Enrollment
 from timetable.models import StudentPersonalEvent
@@ -21,6 +22,95 @@ class TimeTableItem:
     event_id: Optional[int] = None
     building_id: Optional[int] = None
     room_id: Optional[int] = None
+
+def _overlap_q(start: time, end: time) -> Q:
+    # overlap: start < existing_end AND end > existing_start
+    return Q(start_time__lt=end) & Q(end_time__gt=start)
+
+def detect_conflict(
+    *,
+    student: Student,
+    weekday: int,
+    start_time: time,
+    end_time: time,
+    ignore_personal_event_id: Optional[int] = None,
+    ignore_enrollment_id: Optional[int] = None,
+) -> Optional[str]:
+    """
+    Returns a human-readable conflict message if conflict exists, else None.
+    Conflicts against:
+      - Personal events
+      - Courses currently shown on timetable (Enrollment.show_on_timetable=True)
+    """
+    if end_time <= start_time:
+        return "End time must be after start time."
+
+    # 1) Personal events
+    pe_qs = StudentPersonalEvent.objects.filter(
+        student=student,
+        weekday=weekday,
+    ).filter(_overlap_q(start_time, end_time))
+
+    if ignore_personal_event_id:
+        pe_qs = pe_qs.exclude(id=ignore_personal_event_id)
+
+    pe = pe_qs.first()
+    if pe:
+        return (
+            f"Conflicts with personal event: {pe.title} "
+            f"({pe.start_time.strftime('%H:%M')}–{pe.end_time.strftime('%H:%M')})."
+        )
+
+    # 2) Course meetings from currently visible enrollments
+    enroll_qs = Enrollment.objects.filter(student=student, show_on_timetable=True)
+    if ignore_enrollment_id:
+        enroll_qs = enroll_qs.exclude(id=ignore_enrollment_id)
+
+    cm_qs = (
+        SectionMeeting.objects.filter(
+            section__enrollment__in=enroll_qs,
+            weekday=weekday,
+        )
+        .filter(_overlap_q(start_time, end_time))
+        .select_related("section__course")
+    )
+
+    cm = cm_qs.first()
+    if cm:
+        title = cm.section.course.title
+        return (
+            f"Conflicts with course: {title} "
+            f"({cm.start_time.strftime('%H:%M')}–{cm.end_time.strftime('%H:%M')})."
+        )
+
+    return None
+
+
+def detect_conflict_for_section(
+    *,
+    student: Student,
+    section_id: int,
+    ignore_enrollment_id: Optional[int] = None,
+) -> Optional[str]:
+    """
+    A section can have multiple meetings. If ANY meeting conflicts, return message.
+    """
+    meetings = SectionMeeting.objects.filter(section_id=section_id).only(
+        "weekday", "start_time", "end_time"
+    )
+
+    for m in meetings:
+        msg = detect_conflict(
+            student=student,
+            weekday=m.weekday,
+            start_time=m.start_time,
+            end_time=m.end_time,
+            ignore_enrollment_id=ignore_enrollment_id,
+        )
+        if msg:
+            return msg
+
+    return None
 
 def get_student_timetable(student_id: int) -> List[TimeTableItem]:
     # get current logged in student
