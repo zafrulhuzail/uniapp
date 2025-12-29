@@ -23,9 +23,13 @@ class TimeTableItem:
     room_id: Optional[int] = None
 
 def get_student_timetable(student_id: int) -> List[TimeTableItem]:
+    # get current logged in student
     student = Student.objects.get(student_id=student_id)
 
-    meetings = (
+    # from section meetings, filter those that enrolled by this student and show_on_timetable is True
+    # then, fetch related objects: course, building, room
+    # finally, distinct to avoid duplicates 
+    meetings = (    
         SectionMeeting.objects.filter(
             section__enrollment__student=student,
             section__enrollment__show_on_timetable=True,
@@ -34,6 +38,7 @@ def get_student_timetable(student_id: int) -> List[TimeTableItem]:
         .distinct()
     )
 
+    # standardize to TimeTableItem
     course_items: List[TimeTableItem] = []
     for m in meetings:
         course_items.append(
@@ -45,16 +50,19 @@ def get_student_timetable(student_id: int) -> List[TimeTableItem]:
                 end_time=m.end_time,
                 building=m.building.name if m.building else "",
                 room=m.room.name if m.room else "",
-                description="",
+                description=m.description or "",
                 section_id=m.section_id,
             )
         )
 
+    # from student personal events, filter those that belong to this student
+    # fetch related building and room object, instead of ids
     personal_qs = (
         StudentPersonalEvent.objects.filter(student=student)
         .select_related("building", "room")
     )
 
+    # standardize to TimeTableItem
     personal_items: List[TimeTableItem] = []
     for ev in personal_qs:
         personal_items.append(
@@ -73,6 +81,7 @@ def get_student_timetable(student_id: int) -> List[TimeTableItem]:
             )
         )
 
+    # combine both course items and personal event items
     items = course_items + personal_items
     items.sort(key=lambda x: (x.weekday, x.start_time))
     return items
