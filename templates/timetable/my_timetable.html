@@ -7,133 +7,486 @@
 </head>
 
 <body class="bg-white">
-  <div class="max-w-8xl mx-auto px-4 py-6">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <h1 class="text-3xl font-extrabold">My Timetable</h1>
-        <p class="text-sm text-gray-600 mt-1">
-          {{ student.first_name }} {{ student.last_name }} ({{ student.student_id }})
-        </p>
-      </div>
-
-      <button id="openPanelBtn"
-        class="rounded-lg bg-pink-600 px-4 py-2 text-white font-semibold shadow hover:bg-pink-700 active:scale-[0.99]">
-        Add Course
-      </button>
-    </div>
-
-    <!-- Outer frame -->
-    <div class="mt-6 rounded-2xl border-2 border-gray-900 p-4 shadow-[0_6px_0_0_rgba(0,0,0,0.18)]">
-      <div class="grid grid-cols-8 gap-3">
-        <!-- Time column -->
-        <div class="rounded-2xl bg-gray-200 p-3">
-          <div class="text-center font-bold mb-3">Time</div>
-
-          <div class="relative" style="height: {{ grid_height }}px;">
-            {% for lb in label_blocks %}
-              <div class="absolute left-0 right-0 flex items-center justify-center text-xs font-semibold text-gray-800"
-                   style="top: {{ lb.top }}px; height: {{ lb.height }}px;">
-                {{ lb.text }}
-              </div>
-            {% endfor %}
-          </div>
+  <div class="min-h-screen flex relative">
+    <!-- LEFT -->
+    <div class="flex-1 px-4 py-6">
+      <!-- Header with BOTH buttons (no fixed positioning, shifts with timetable) -->
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-extrabold">My Timetable</h1>
+          <p class="text-sm text-gray-600 mt-1">
+            {{ student.first_name }} {{ student.last_name }} ({{ student.student_id }})
+          </p>
         </div>
 
-        <!-- Day columns -->
-        {% for day_id, day_name in day_labels %}
+        <div class="flex items-center gap-2">
+          <button id="newEventBtn"
+                  class="rounded-lg bg-orange-500 px-4 py-2 text-white font-semibold shadow hover:bg-orange-600">
+            + Personal Event
+          </button>
+
+          <button id="openPanelBtn"
+                  class="rounded-lg bg-pink-600 px-4 py-2 text-white font-semibold shadow hover:bg-pink-700">
+            Open Courses
+          </button>
+        </div>
+      </div>
+
+      <!-- Timetable dropzone -->
+      <div id="timetableDropZone"
+           class="mt-6 rounded-2xl border-2 border-gray-900 p-4 shadow-[0_6px_0_0_rgba(0,0,0,0.18)] transition">
+        <div class="grid grid-cols-8 gap-3">
+          <!-- Time col -->
           <div class="rounded-2xl bg-gray-200 p-3">
-            <div class="text-center font-bold mb-3">{{ day_name }}</div>
-
+            <div class="text-center font-bold mb-3">Time</div>
             <div class="relative" style="height: {{ grid_height }}px;">
-              <!-- Events for this day -->
-              {% for b in blocks %}
-                {% if b.weekday == day_id %}
-                  <div
-                    class="absolute left-2 right-2 {{ b.color }} text-white rounded-xl shadow-lg p-3"
-                    style="top: {{ b.top }}px; height: {{ b.height }}px;"
-                  >
-                    <div class="flex items-start justify-between gap-2">
-                      <div class="font-semibold text-sm leading-tight">
-                        {{ b.title }}
-                      </div>
-
-                      <!-- close (hide) button placeholder -->
-                      <button class="text-white/90 hover:text-white text-lg leading-none"
-                              title="Remove (later)">
-                        ×
-                      </button>
-                    </div>
-
-                    <div class="mt-1 text-[11px] opacity-90">
-                      {{ b.start_time }} – {{ b.end_time }}
-                    </div>
-
-                    <div class="mt-1 text-[11px] opacity-90">
-                      {{ b.building }} {{ b.room }}
-                    </div>
-
-                    {% if b.description %}
-                      <div class="mt-0 text-[11px] opacity-90 line-clamp-2">
-                        {{ b.description }}
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
+              {% for lb in label_blocks %}
+                <div class="absolute left-0 right-0 flex items-center justify-center text-xs font-semibold text-gray-800"
+                     style="top: {{ lb.top }}px; height: {{ lb.height }}px;">
+                  {{ lb.text }}
+                </div>
               {% endfor %}
             </div>
           </div>
-        {% endfor %}
+
+          <!-- Days -->
+          {% for day_id, day_name in day_labels %}
+            <div class="rounded-2xl bg-gray-200 p-3">
+              <div class="text-center font-bold mb-3">{{ day_name }}</div>
+
+              <div class="relative" style="height: {{ grid_height }}px;">
+                {% for b in blocks %}
+                  {% if b.weekday == day_id %}
+                    <div
+                      class="absolute left-2 right-2 {{ b.color }} text-white rounded-xl shadow-lg p-3 overflow-hidden cursor-grab"
+                      style="top: {{ b.top }}px; height: {{ b.height }}px;"
+                      draggable="true"
+                      {% if b.enrollment_id %}
+                        data-enrollment-id="{{ b.enrollment_id }}"
+                      {% endif %}
+
+                      {% if b.type == "personal_event" %}
+                        data-event-id="{{ b.event_id }}"
+                        data-title="{{ b.title|escape }}"
+                        data-weekday="{{ b.weekday }}"
+                        data-start="{{ b.start_time }}"
+                        data-end="{{ b.end_time }}"
+                        data-building-id="{{ b.building_id|default:'' }}"
+                        data-room-id="{{ b.room_id|default:'' }}"
+                        data-description="{{ b.description|default:''|escape }}"
+                      {% endif %}
+                    >
+                      <div class="flex items-start justify-between gap-2">
+                        <div class="font-semibold text-sm leading-tight break-words pr-2">
+                          {{ b.title }}
+                        </div>
+
+                        {% if b.type == "personal_event" %}
+                          <div class="flex items-center gap-2">
+                            <button class="text-white/90 hover:text-white text-xs underline"
+                                    data-edit-event="{{ b.event_id }}">
+                              Edit
+                            </button>
+                            <button class="text-white/90 hover:text-white text-lg leading-none"
+                                    title="Delete"
+                                    data-delete-event="{{ b.event_id }}">
+                              ×
+                            </button>
+                          </div>
+                        {% else %}
+                          {% if b.enrollment_id %}
+                            <button class="text-white/90 hover:text-white text-lg leading-none shrink-0"
+                                    title="Remove"
+                                    data-hide-btn="{{ b.enrollment_id }}">
+                              ×
+                            </button>
+                          {% else %}
+                            <span class="text-white/60 text-lg leading-none">×</span>
+                          {% endif %}
+                        {% endif %}
+                      </div>
+
+                      <div class="mt-1 text-[11px] opacity-90 leading-tight">
+                        {{ b.start_time }} – {{ b.end_time }}
+                      </div>
+                      <div class="mt-1 text-[11px] opacity-90 leading-tight break-words">
+                        {{ b.building }} {{ b.room }}
+                      </div>
+
+                      {% if b.description %}
+                        <div class="mt-0 text-[11px] opacity-90 line-clamp-2">
+                          {{ b.description }}
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
       </div>
+    </div>
+
+    <!-- RIGHT: collapsible courses panel (no overlay) -->
+    <aside id="panel"
+           class="w-[360px] shrink-0 border-l bg-white transition-all duration-200 overflow-hidden">
+      <div class="p-4 flex items-center justify-between border-b gap-2">
+        <div class="font-bold text-lg">Courses</div>
+        <button id="closePanelBtn"
+                class="text-2xl leading-none text-gray-700 hover:text-black"
+                title="Close">×</button>
+      </div>
+
+      <div id="poolDropZone"
+           class="p-4 space-y-3 border-2 border-dashed rounded-xl m-4">
+        <div class="text-sm text-gray-600">
+          Drag a course into the timetable to show it. Drag back here to hide it.
+        </div>
+
+        {% if pool_items %}
+          {% for c in pool_items %}
+            <div class="rounded-xl border p-3 hover:bg-gray-50 cursor-grab bg-white"
+                 draggable="true"
+                 data-enrollment-id="{{ c.enrollment_id }}">
+              <div class="font-semibold">{{ c.title }}</div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="text-sm text-gray-500">No hidden courses available.</div>
+        {% endif %}
+      </div>
+    </aside>
+  </div>
+
+  <!-- PERSONAL EVENT MODAL -->
+  <div id="eventModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50">
+    <div class="w-full max-w-lg rounded-2xl bg-white shadow-2xl border p-5">
+      <div class="flex items-center justify-between">
+        <h2 id="modalTitle" class="text-xl font-bold">New Personal Event</h2>
+        <button id="closeModalBtn" class="text-2xl leading-none">×</button>
+      </div>
+
+      <form id="eventForm" class="mt-4 space-y-3">
+        <input type="hidden" id="eventId" value="" />
+
+        <div>
+          <label class="text-sm font-semibold">Title</label>
+          <input id="title" class="mt-1 w-full rounded-lg border px-3 py-2" required />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-sm font-semibold">Weekday</label>
+            <select id="weekday" class="mt-1 w-full rounded-lg border px-3 py-2" required>
+              {% for d_id, d_name in day_labels %}
+                <option value="{{ d_id }}">{{ d_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm font-semibold">Start</label>
+              <input id="start_time" type="time" class="mt-1 w-full rounded-lg border px-3 py-2" required />
+            </div>
+            <div>
+              <label class="text-sm font-semibold">End</label>
+              <input id="end_time" type="time" class="mt-1 w-full rounded-lg border px-3 py-2" required />
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-sm font-semibold">Building</label>
+            <select id="building_id" class="mt-1 w-full rounded-lg border px-3 py-2">
+              <option value="">—</option>
+              {% for b in buildings %}
+                <option value="{{ b.id }}">{{ b.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label class="text-sm font-semibold">Room</label>
+            <select id="room_id" class="mt-1 w-full rounded-lg border px-3 py-2">
+              <option value="">—</option>
+              {% for r in rooms %}
+                <option value="{{ r.id }}">{{ r.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-sm font-semibold">Description</label>
+          <textarea id="description" rows="3" class="mt-1 w-full rounded-lg border px-3 py-2"></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" id="cancelBtn"
+                  class="rounded-lg border px-4 py-2 font-semibold hover:bg-gray-50">
+            Cancel
+          </button>
+          <button type="submit"
+                  class="rounded-lg bg-orange-500 px-4 py-2 text-white font-semibold shadow hover:bg-orange-600">
+            Save
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
-  <!-- Right slide panel -->
-  <div id="overlay" class="fixed inset-0 bg-black/30 hidden"></div>
-
-  <aside id="panel"
-    class="fixed top-0 right-0 h-full w-[360px] bg-white shadow-2xl border-l border-gray-200 translate-x-full transition-transform duration-200">
-    <div class="p-4 flex items-center justify-between border-b">
-      <div class="font-bold text-lg">Course</div>
-      <button id="closePanelBtn" class="text-2xl leading-none">×</button>
-    </div>
-
-    <div class="p-4 space-y-3">
-      <div class="text-sm text-gray-600">
-        (For now) list your electives here. Later you can drag them into the timetable.
-      </div>
-
-      <!-- Example cards (replace with your API data rendered by Django) -->
-      <div class="rounded-xl border p-3 hover:bg-gray-50 cursor-grab">
-        <div class="font-semibold">Math 3</div>
-        <div class="text-xs text-gray-600 mt-1">Di 08:43–09:43 · W W3.01</div>
-      </div>
-
-      <div class="rounded-xl border p-3 hover:bg-gray-50 cursor-grab">
-        <div class="font-semibold">Informatik 2</div>
-        <div class="text-xs text-gray-600 mt-1">Sa 12:08–13:08 · W W3.01</div>
-      </div>
-    </div>
-  </aside>
-
   <script>
+    // -------------------------
+    // Panel open/close
+    // -------------------------
     const panel = document.getElementById("panel");
-    const overlay = document.getElementById("overlay");
     const openBtn = document.getElementById("openPanelBtn");
     const closeBtn = document.getElementById("closePanelBtn");
+    const PANEL_OPEN_WIDTH = "360px";
 
     function openPanel() {
-      panel.classList.remove("translate-x-full");
-      overlay.classList.remove("hidden");
+      panel.style.width = PANEL_OPEN_WIDTH;
+      panel.classList.remove("border-l-0");
+      openBtn.classList.add("hidden"); // hide Open Courses when open
+      localStorage.setItem("coursesPanelOpen", "1");
     }
 
     function closePanel() {
-      panel.classList.add("translate-x-full");
-      overlay.classList.add("hidden");
+      panel.style.width = "0px";
+      panel.classList.add("border-l-0");
+      openBtn.classList.remove("hidden");
+      localStorage.setItem("coursesPanelOpen", "0");
     }
+
+    if (localStorage.getItem("coursesPanelOpen") === "1") openPanel();
+    else closePanel();
 
     openBtn.addEventListener("click", openPanel);
     closeBtn.addEventListener("click", closePanel);
-    overlay.addEventListener("click", closePanel);
+
+    // -------------------------
+    // CSRF + POST helper
+    // -------------------------
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(";").shift();
+    }
+    const csrfToken = getCookie("csrftoken");
+
+    async function postForm(url, formData) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrfToken },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        let msg = "Error";
+        try {
+          const data = await res.json();
+          msg = data.error || msg;
+        } catch {}
+        alert(msg);
+        return false;
+      }
+      return true;
+    }
+
+    async function postToggle(url) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrfToken },
+      });
+
+      if (!res.ok) {
+        let msg = "Error";
+        try {
+          const data = await res.json();
+          msg = data.error || msg;
+        } catch {}
+        alert(msg);
+        return false;
+      }
+      return true;
+    }
+
+    // -------------------------
+    // Drag & drop for courses
+    // -------------------------
+    const timetableDrop = document.getElementById("timetableDropZone");
+    const poolDrop = document.getElementById("poolDropZone");
+
+    let draggedEnrollmentId = null;
+
+    document.addEventListener("dragstart", (e) => {
+      const card = e.target.closest("[draggable='true'][data-enrollment-id]");
+      if (!card) return;
+      draggedEnrollmentId = card.dataset.enrollmentId;
+      e.dataTransfer.effectAllowed = "move";
+    }, true);
+
+    document.addEventListener("dragend", () => {
+      draggedEnrollmentId = null;
+    });
+
+    function allowDrop(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    }
+
+    timetableDrop.addEventListener("dragover", allowDrop);
+    timetableDrop.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      if (!draggedEnrollmentId) return;
+
+      const ok = await postToggle(`/timetable/enrollment/${draggedEnrollmentId}/show/`);
+      if (ok) {
+        localStorage.setItem("coursesPanelOpen", "1");
+        location.reload();
+      }
+    });
+
+    poolDrop.addEventListener("dragover", allowDrop);
+    poolDrop.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      if (!draggedEnrollmentId) return;
+
+      const ok = await postToggle(`/timetable/enrollment/${draggedEnrollmentId}/hide/`);
+      if (ok) {
+        localStorage.setItem("coursesPanelOpen", "1");
+        location.reload();
+      }
+    });
+
+    document.querySelectorAll("[data-hide-btn]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = btn.dataset.hideBtn;
+
+        const ok = await postToggle(`/timetable/enrollment/${id}/hide/`);
+        if (ok) {
+          localStorage.setItem("coursesPanelOpen", "1");
+          location.reload();
+        }
+      });
+    });
+
+    // -------------------------
+    // Personal event modal CRUD
+    // -------------------------
+    const modal = document.getElementById("eventModal");
+    const modalTitle = document.getElementById("modalTitle");
+    const closeModalBtn = document.getElementById("closeModalBtn");
+    const cancelBtn = document.getElementById("cancelBtn");
+    const newEventBtn = document.getElementById("newEventBtn");
+    const form = document.getElementById("eventForm");
+
+    const fEventId = document.getElementById("eventId");
+    const fTitle = document.getElementById("title");
+    const fWeekday = document.getElementById("weekday");
+    const fStart = document.getElementById("start_time");
+    const fEnd = document.getElementById("end_time");
+    const fBuilding = document.getElementById("building_id");
+    const fRoom = document.getElementById("room_id");
+    const fDesc = document.getElementById("description");
+
+    function openModalCreate() {
+      modalTitle.textContent = "New Personal Event";
+      fEventId.value = "";
+      fTitle.value = "";
+      fWeekday.value = "1";
+      fStart.value = "08:00";
+      fEnd.value = "09:00";
+      fBuilding.value = "";
+      fRoom.value = "";
+      fDesc.value = "";
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function openModalEdit(data) {
+      modalTitle.textContent = "Edit Personal Event";
+      fEventId.value = data.eventId;
+      fTitle.value = data.title;
+      fWeekday.value = data.weekday;
+      fStart.value = data.start;
+      fEnd.value = data.end;
+      fBuilding.value = data.buildingId || "";
+      fRoom.value = data.roomId || "";
+      fDesc.value = data.description || "";
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeModal() {
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    newEventBtn.addEventListener("click", openModalCreate);
+    closeModalBtn.addEventListener("click", closeModal);
+    cancelBtn.addEventListener("click", closeModal);
+
+    document.querySelectorAll("[data-edit-event]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const eventId = btn.dataset.editEvent;
+        const card = document.querySelector(`[data-event-id="${eventId}"]`);
+        if (!card) return;
+
+        openModalEdit({
+          eventId,
+          title: card.dataset.title || "",
+          weekday: card.dataset.weekday || "1",
+          start: card.dataset.start || "08:00",
+          end: card.dataset.end || "09:00",
+          buildingId: card.dataset.buildingId || "",
+          roomId: card.dataset.roomId || "",
+          description: card.dataset.description || "",
+        });
+      });
+    });
+
+    document.querySelectorAll("[data-delete-event]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const eventId = btn.dataset.deleteEvent;
+        if (!confirm("Delete this personal event?")) return;
+
+        const ok = await postForm(`/timetable/personal/${eventId}/delete/`, new FormData());
+        if (ok) location.reload();
+      });
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const fd = new FormData();
+      fd.append("title", fTitle.value);
+      fd.append("weekday", fWeekday.value);
+      fd.append("start_time", fStart.value);
+      fd.append("end_time", fEnd.value);
+      fd.append("building_id", fBuilding.value);
+      fd.append("room_id", fRoom.value);
+      fd.append("description", fDesc.value);
+
+      const id = fEventId.value.trim();
+      const url = id
+        ? `/timetable/personal/${id}/update/`
+        : `/timetable/personal/create/`;
+
+      const ok = await postForm(url, fd);
+      if (ok) location.reload();
+    });
   </script>
 </body>
 </html>
