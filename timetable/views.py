@@ -40,32 +40,44 @@ def student_timetable(request, student_id):
 
 @login_required
 def my_timetable(request):
+    # get current logged in user and check if is student
     user = request.user
     if not hasattr(user, "student"):
         return HttpResponse("You are not a student.", status=403)
 
+    # get student object
     student = user.student
 
+    # filter enrollments for this student
+    # fetch related section and course objects
+    # up to here which courses enrolled by this student are known
     enrollments = (
         Enrollment.objects.filter(student=student)
         .select_related("section__course")
     )
 
+    # prepare pool items for courses not shown on timetable
+    # Column 1 | Column 2 | Column 3
+    # Enrollment ID | Course Title | Section ID
     pool_items = [
         {"enrollment_id": e.id, "title": e.section.course.title, "section_id": e.section_id}
         for e in enrollments.filter(show_on_timetable=False)
     ]
 
+    # create a set of dict
+    # map section_id to enrollment_id for quick lookup later
     section_to_enrollment_id = {e.section_id: e.id for e in enrollments}
 
+    # get timetable items for this student
+    # all enrolled courses and personal events
     items = get_student_timetable(student.student_id)
 
-    day_start = time(8, 0)
-    day_end = time(19, 25)
-    px_per_min = 1.0
+    day_start = time(8, 0) # timetable starts at 08:00
+    day_end = time(19, 25) # timetable ends at 19:25
+    px_per_min = 5.0       # 2 pixels per minute
 
-    total_minutes = _minutes_since(day_start, day_end)
-    grid_height = total_minutes * px_per_min
+    total_minutes = _minutes_since(day_start, day_end) # 685 minutes
+    grid_height = total_minutes * px_per_min # grid_height = 685 × 2.0 = 1370.0 pixels
 
     time_labels = [
         ("08:00", "08:45"), ("08:45", "09:30"),
@@ -77,35 +89,42 @@ def my_timetable(request):
         ("18:40", "19:25"),
     ]
 
+    # compute pixels for time labels on the left side of timetable
     label_blocks = []
     for s, e in time_labels:
-        sh, sm = map(int, s.split(":"))
-        eh, em = map(int, e.split(":"))
-        top = _minutes_since(day_start, time(sh, sm)) * px_per_min
-        height = (_minutes_since(day_start, time(eh, em)) - _minutes_since(day_start, time(sh, sm))) * px_per_min
-        label_blocks.append({"text": f"{s} - {e}", "top": top, "height": height})
+        sh, sm = map(int, s.split(":")) # "08:00".split(":") -> ["08", "00"] -> sh=8, sm=0
+        eh, em = map(int, e.split(":")) # "08:45".split(":") -> ["08", "45"] -> eh=8, em=45
 
+        # calculate top and height in pixels for frontend rendering
+        top = _minutes_since(day_start, time(sh, sm)) * px_per_min  
+        height = (_minutes_since(day_start, time(eh, em)) - _minutes_since(day_start, time(sh, sm))) * px_per_min
+
+        # append to label_blocks list
+        label_blocks.append({"text": f"{s} - {e}", "top": top, "height": height}) #need to change
+
+    # compute pixels for each timetable item
     MIN_CARD_HEIGHT_PX = 70
     blocks = []
 
     for item in items:
+        # validate weekday, skip if invalid
         if not isinstance(item.weekday, int) or item.weekday < 1 or item.weekday > 7:
-            continue
+            continue 
 
-        start_minutes = _minutes_since(day_start, item.start_time)
-        end_minutes = _minutes_since(day_start, item.end_time)
+        start_minutes = _minutes_since(day_start, item.start_time) # 08:00 -> 0 minutes
+        end_minutes = _minutes_since(day_start, item.end_time) # e.g., 09:30 -> 90 minutes
 
-        start_minutes = max(0, start_minutes)
-        end_minutes = min(total_minutes, end_minutes)
-        if end_minutes <= start_minutes:
+        start_minutes = max(0, start_minutes) # if class starts before day_start (8:00), set to 0
+        end_minutes = min(total_minutes, end_minutes) # avoid overflow outside timetable grid
+        if end_minutes <= start_minutes: # invalid time range, skip
             continue
 
         top = start_minutes * px_per_min
-        height = max((end_minutes - start_minutes) * px_per_min, MIN_CARD_HEIGHT_PX)
+        height = max((end_minutes - start_minutes) * px_per_min, MIN_CARD_HEIGHT_PX) # ensure minimum height, e.g., 30 minutes class shows at least 70px
 
         enrollment_id = None
         if item.type == "course" and item.section_id is not None:
-            enrollment_id = section_to_enrollment_id.get(item.section_id)
+            enrollment_id = section_to_enrollment_id.get(item.section_id) #return enrollment id
 
         blocks.append({
             "type": item.type,
