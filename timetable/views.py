@@ -4,7 +4,7 @@ from django.http import HttpResponse
 from buildings.models import Building, Room
 from .services import get_student_timetable
 from django.contrib.auth.decorators import login_required
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from courses.models import Enrollment
 # Create your views here.
 
@@ -30,6 +30,10 @@ DAY_LABELS = [
 
 def _minutes_since(day_start: time, t: time) -> int:
     return (t.hour * 60 + t.minute) - (day_start.hour * 60 + day_start.minute)
+
+def _time_add_minutes(t: time, minutes: int) -> time:
+    dt = datetime.combine(datetime.today().date(), t) + timedelta(minutes=minutes)
+    return dt.time()
 
 def student_timetable(request, student_id):
   items = get_student_timetable(student_id)
@@ -74,33 +78,22 @@ def my_timetable(request):
 
     day_start = time(8, 0) # timetable starts at 08:00
     day_end = time(19, 25) # timetable ends at 19:25
-    px_per_min = 5.0       # 2 pixels per minute
+    px_per_min = 2.0       # 2 pixels per minute
 
     total_minutes = _minutes_since(day_start, day_end) # 685 minutes
     grid_height = total_minutes * px_per_min # grid_height = 685 × 2.0 = 1370.0 pixels
 
-    time_labels = [
-        ("08:00", "08:45"), ("08:45", "09:30"),
-        ("09:50", "10:35"), ("10:35", "11:20"),
-        ("11:40", "12:25"), ("12:25", "13:10"),
-        ("14:00", "14:45"), ("14:45", "15:30"),
-        ("15:40", "16:25"), ("16:25", "17:10"),
-        ("17:10", "17:55"), ("17:55", "18:40"),
-        ("18:40", "19:25"),
-    ]
-
-    # compute pixels for time labels on the left side of timetable
+    # Continuous time ticks for the left axis
+    # every 15 minutes
+    TICK_MINUTES = 30
     label_blocks = []
-    for s, e in time_labels:
-        sh, sm = map(int, s.split(":")) # "08:00".split(":") -> ["08", "00"] -> sh=8, sm=0
-        eh, em = map(int, e.split(":")) # "08:45".split(":") -> ["08", "45"] -> eh=8, em=45
-
-        # calculate top and height in pixels for frontend rendering
-        top = _minutes_since(day_start, time(sh, sm)) * px_per_min  
-        height = (_minutes_since(day_start, time(eh, em)) - _minutes_since(day_start, time(sh, sm))) * px_per_min
-
-        # append to label_blocks list
-        label_blocks.append({"text": f"{s} - {e}", "top": top, "height": height}) #need to change
+    current = day_start
+    while current <= day_end:
+        label_blocks.append({
+            "text": current.strftime("%H:%M"),
+            "top": _minutes_since(day_start, current) * px_per_min,
+        })
+        current = _time_add_minutes(current, TICK_MINUTES)
 
     # compute pixels for each timetable item
     MIN_CARD_HEIGHT_PX = 70
