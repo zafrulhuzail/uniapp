@@ -1,3 +1,4 @@
+{# templates/timetable/my_timetable.html #}
 <!doctype html>
 <html>
 <head>
@@ -10,7 +11,7 @@
   <div class="min-h-screen flex relative">
     <!-- LEFT -->
     <div class="flex-1 px-4 py-6">
-      <!-- Header with BOTH buttons (no fixed positioning, shifts with timetable) -->
+      <!-- Header with BOTH buttons (shifts with timetable) -->
       <div class="flex items-start justify-between gap-4">
         <div>
           <h1 class="text-3xl font-extrabold">My Timetable</h1>
@@ -39,10 +40,15 @@
           <!-- Time col -->
           <div class="rounded-2xl bg-gray-200 p-3">
             <div class="text-center font-bold mb-3">Time</div>
+
+            <!-- Continuous time axis ticks -->
             <div class="relative" style="height: {{ grid_height }}px;">
               {% for lb in label_blocks %}
-                <div class="absolute left-0 right-0 flex items-center justify-center text-xs font-semibold text-gray-800"
-                     style="top: {{ lb.top }}px; height: {{ lb.height }}px;">
+                <!-- horizontal grid lines -->
+                <div class="absolute left-0 right-0 border-t border-gray-300" style="top: {{ lb.top }}px;"></div>
+                <!-- time label -->
+                <div class="absolute left-0 right-0 -translate-y-2 text-xs font-semibold text-gray-800 text-center" 
+                    style="top: {{ lb.top }}px;">
                   {{ lb.text }}
                 </div>
               {% endfor %}
@@ -55,22 +61,32 @@
               <div class="text-center font-bold mb-3">{{ day_name }}</div>
 
               <div class="relative" style="height: {{ grid_height }}px;">
+                <!-- horizontal grid lines -->
+                {% for lb in label_blocks %}
+                    <div
+                    class="absolute left-0 right-0 border-t border-gray-300"
+                    style="top: {{ lb.top }}px;">
+                    </div>
+                {% endfor %}
+                <!-- events -->
                 {% for b in blocks %}
                   {% if b.weekday == day_id %}
                     <div
                       class="absolute left-2 right-2 {{ b.color }} text-white rounded-xl shadow-lg p-3 overflow-hidden cursor-grab"
                       style="top: {{ b.top }}px; height: {{ b.height }}px;"
                       draggable="true"
+
                       {% if b.enrollment_id %}
                         data-enrollment-id="{{ b.enrollment_id }}"
                       {% endif %}
 
+                      data-weekday="{{ b.weekday }}"
+                      data-start="{{ b.start_time }}"
+                      data-end="{{ b.end_time }}"
+
                       {% if b.type == "personal_event" %}
                         data-event-id="{{ b.event_id }}"
                         data-title="{{ b.title|escape }}"
-                        data-weekday="{{ b.weekday }}"
-                        data-start="{{ b.start_time }}"
-                        data-end="{{ b.end_time }}"
                         data-building-id="{{ b.building_id|default:'' }}"
                         data-room-id="{{ b.room_id|default:'' }}"
                         data-description="{{ b.description|default:''|escape }}"
@@ -82,7 +98,7 @@
                         </div>
 
                         {% if b.type == "personal_event" %}
-                          <div class="flex items-center gap-2">
+                          <div class="flex items-center gap-2 shrink-0">
                             <button class="text-white/90 hover:text-white text-xs underline"
                                     data-edit-event="{{ b.event_id }}">
                               Edit
@@ -109,6 +125,7 @@
                       <div class="mt-1 text-[11px] opacity-90 leading-tight">
                         {{ b.start_time }} – {{ b.end_time }}
                       </div>
+
                       <div class="mt-1 text-[11px] opacity-90 leading-tight break-words">
                         {{ b.building }} {{ b.room }}
                       </div>
@@ -240,7 +257,7 @@
 
   <script>
     // -------------------------
-    // Panel open/close
+    // Panel open/close (no overlay)
     // -------------------------
     const panel = document.getElementById("panel");
     const openBtn = document.getElementById("openPanelBtn");
@@ -268,7 +285,7 @@
     closeBtn.addEventListener("click", closePanel);
 
     // -------------------------
-    // CSRF + POST helper
+    // CSRF helper
     // -------------------------
     function getCookie(name) {
       const value = `; ${document.cookie}`;
@@ -277,38 +294,57 @@
     }
     const csrfToken = getCookie("csrftoken");
 
-    async function postForm(url, formData) {
+    // POST for show/hide (warn + confirm + force)
+    async function postToggle(url, force = false) {
+      const fd = new FormData();
+      if (force) fd.append("force", "1");
+
       const res = await fetch(url, {
         method: "POST",
         headers: { "X-CSRFToken": csrfToken },
-        body: formData,
+        body: fd,
       });
 
+      let data = {};
+      try { data = await res.json(); } catch {}
+
+      if (data.warning && data.can_force) {
+        const ok = confirm(`${data.warning}\n\nDo you want to continue anyway?`);
+        if (ok) return postToggle(url, true);
+        return false;
+      }
+
       if (!res.ok) {
-        let msg = "Error";
-        try {
-          const data = await res.json();
-          msg = data.error || msg;
-        } catch {}
-        alert(msg);
+        alert(data.error || "Error");
         return false;
       }
       return true;
     }
 
-    async function postToggle(url) {
+    // POST for personal event create/update (warn + confirm + force)
+    async function postFormWithWarning(url, fd, force = false) {
+      // clone FormData so we can resend
+      const fd2 = new FormData();
+      for (const [k, v] of fd.entries()) fd2.append(k, v);
+      if (force) fd2.append("force", "1");
+
       const res = await fetch(url, {
         method: "POST",
         headers: { "X-CSRFToken": csrfToken },
+        body: fd2,
       });
 
+      let data = {};
+      try { data = await res.json(); } catch {}
+
+      if (data.warning && data.can_force) {
+        const ok = confirm(`${data.warning}\n\nDo you want to continue anyway?`);
+        if (ok) return postFormWithWarning(url, fd, true);
+        return false;
+      }
+
       if (!res.ok) {
-        let msg = "Error";
-        try {
-          const data = await res.json();
-          msg = data.error || msg;
-        } catch {}
-        alert(msg);
+        alert(data.error || "Error");
         return false;
       }
       return true;
@@ -320,17 +356,29 @@
     const timetableDrop = document.getElementById("timetableDropZone");
     const poolDrop = document.getElementById("poolDropZone");
 
+    function glow(el, on) {
+      if (!el) return;
+      if (on) el.classList.add("ring-4", "ring-pink-400");
+      else el.classList.remove("ring-4", "ring-pink-400");
+    }
+
     let draggedEnrollmentId = null;
 
     document.addEventListener("dragstart", (e) => {
       const card = e.target.closest("[draggable='true'][data-enrollment-id]");
       if (!card) return;
+
       draggedEnrollmentId = card.dataset.enrollmentId;
       e.dataTransfer.effectAllowed = "move";
+
+      glow(timetableDrop, true);
+      glow(poolDrop, true);
     }, true);
 
     document.addEventListener("dragend", () => {
       draggedEnrollmentId = null;
+      glow(timetableDrop, false);
+      glow(poolDrop, false);
     });
 
     function allowDrop(e) {
@@ -338,6 +386,7 @@
       e.dataTransfer.dropEffect = "move";
     }
 
+    // Drop into timetable => show
     timetableDrop.addEventListener("dragover", allowDrop);
     timetableDrop.addEventListener("drop", async (e) => {
       e.preventDefault();
@@ -350,6 +399,7 @@
       }
     });
 
+    // Drop back into pool => hide
     poolDrop.addEventListener("dragover", allowDrop);
     poolDrop.addEventListener("drop", async (e) => {
       e.preventDefault();
@@ -362,6 +412,7 @@
       }
     });
 
+    // Click X to hide course
     document.querySelectorAll("[data-hide-btn]").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -432,6 +483,7 @@
     closeModalBtn.addEventListener("click", closeModal);
     cancelBtn.addEventListener("click", closeModal);
 
+    // Edit personal event
     document.querySelectorAll("[data-edit-event]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
@@ -454,6 +506,7 @@
       });
     });
 
+    // Delete personal event
     document.querySelectorAll("[data-delete-event]").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -462,11 +515,25 @@
         const eventId = btn.dataset.deleteEvent;
         if (!confirm("Delete this personal event?")) return;
 
-        const ok = await postForm(`/timetable/personal/${eventId}/delete/`, new FormData());
-        if (ok) location.reload();
+        const fd = new FormData();
+        const res = await fetch(`/timetable/personal/${eventId}/delete/`, {
+          method: "POST",
+          headers: { "X-CSRFToken": csrfToken },
+          body: fd
+        });
+
+        if (!res.ok) {
+          let data = {};
+          try { data = await res.json(); } catch {}
+          alert(data.error || "Error");
+          return;
+        }
+
+        location.reload();
       });
     });
 
+    // Create/update submit
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -484,7 +551,7 @@
         ? `/timetable/personal/${id}/update/`
         : `/timetable/personal/create/`;
 
-      const ok = await postForm(url, fd);
+      const ok = await postFormWithWarning(url, fd);
       if (ok) location.reload();
     });
   </script>
